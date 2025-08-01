@@ -1,0 +1,18 @@
+# docker-compose.yml
+
+version: '3.8'
+services:
+  postgres: # 이 Docker에서 사용할 서비스 (PostgreSQL 지정)
+    image: postgres:13.5
+    restart: always
+    environment:
+      - POSTGRES_USER=myuser         # user명
+      - POSTGRES_PASSWORD=mypassword # 비밀번호
+      - POSTGRES_DB=median-db
+    volumes:                              # 데이터를 Docker의 볼륨에 저장 (컨테이너 삭제돼도 데이터 유지)
+      - postgres:/var/lib/postgresql/data # 컨테이너 내부 경로 (여기에 데이터 저장)
+    ports:
+      - '5432:5432' # 'host 머신의 포트 - 컨테이너의 포트' 연결
+
+volumes:
+  postgres: # 'postgres'라는 이름의 Docker 볼륨 생성 -> DB 데이터 저장
