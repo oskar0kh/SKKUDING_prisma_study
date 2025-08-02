@@ -34,6 +34,7 @@ export class RestaurantController {
         }
     }
 
+    /*
 
     // 2. 특정 name의 restaurant 가져오기 (Controller)
     // * Query 방식
@@ -141,4 +142,7 @@ export class RestaurantController {
             }
         }
     }
+
+
+    */
 }

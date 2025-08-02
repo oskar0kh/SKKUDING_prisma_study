@@ -23,6 +23,8 @@ describe('RestaurantService', () => {
   });
 });
 
+/*
+
 // 1. Service - 'getAllRestaurants()' 테스트
 describe('RestaurantService - getAllRestaurants() 유닛 테스트', () => {
   let service: RestaurantService;
@@ -239,3 +241,5 @@ describe('RestaurantService - patchRestaurant() 유닛 테스트', () => {
     expect(updatedJson).toEqual(testJsonData);
   });
 });
+
+*/

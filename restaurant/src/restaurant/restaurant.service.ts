@@ -1,4 +1,5 @@
 import { Injectable, Res } from '@nestjs/common';
+import { PrismaService } from '../../../src/prisma/prisma.service'; // 추가!
 
 import { Restaurant, RestaurantList } from './interface/restaurant.interface';
 import { promises } from 'dns';
@@ -9,36 +10,31 @@ const path = require('path');
 const { fileURLToPath } = require('url');
 const { dirname } = require('path');
 
-//////////////
-
-import { PrismaService } from '../../../src/prisma/prisma.service';
-
-/////////////
-
 @Injectable()
 export class RestaurantService {
-    constructor(private prisma: PrismaService) {} // Prisma 생성자
 
-    // 밑의 Service 로직 -> Json 파일 말고 DB로 들어가도록, Prisma Query화 진행!
+    constructor(private prisma: PrismaService) {} // 생성자 -> Prisma 객체 생성
 
-    // 디렉토리를 한번만 선언 (process.cwd() : 루트 디렉토리)
-    private readonly filePath = path.join(process.cwd(), 'src', 'restaurant', 'data', 'restaurants.json');
-
-    // 1. 모든 restaurant 데이터 가져오기 (Service)
+    // 1. 모든 restaurant 데이터 가져오기 (Service) - SQL DB에서 데이터 가져오기 (JSON 파일 X)
     async getAllRestaurants(): Promise<RestaurantList> {
         try {
 
-            // 1-1. fs 모듈의 promise 기능 사용 -> await 붙여서, fs 모듈의 결과 기다림
-            const data: string = await fs.promises.readFile(this.filePath, 'utf-8');
+            // 1-1. 'restaurant' 테이블 속 모든 데이터 가져오기
+            //      -> 이때, prisma로 찾은 데이터에는 'createdAt' 같은 SQL 테이블에만 있는 데이터가 포함되어 있어서,
+            //         'restaurants'의 타입은 'Restaurant[]'로 지정하는게 맞음
+            //         (RestaurantList에는 createdAt 같은 데이터가 없기에, 그냥 Restaurant 배열로 받는게 맞음)
+            const restaurants: Restaurant[] = await this.prisma.restaurant.findMany();
 
-            // 1-2. 가져온 JSON 데이터 반환
-            return JSON.parse(data);
+            // 1-2. 가져온 DB 데이터 반환
+            return { restaurants };
 
         } catch(err) {
             console.error(`모든 데이터 가져오기 오류 : ${err}`);
-            throw new Error(`JSON 파일 읽기 실패: ${err.message}`);
+            throw new Error(`DB에서 restaruant 조회 실패: ${err.message}`);
         }
     }
+
+    /*
 
     // 2. 특정 name의 restaurant 가져오기 (Service)
     async getRestaurantByName(name: string): Promise<Restaurant | undefined> {
@@ -153,4 +149,6 @@ export class RestaurantService {
             throw new Error(`restaurant 갱신 실패: ${err.message}`);
         }
     }
+
+    */
 }

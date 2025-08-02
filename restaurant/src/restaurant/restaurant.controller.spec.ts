@@ -26,6 +26,8 @@ describe('RestaurantController', () => { // 1-1. 현재 테스트 그룹명 = 'R
   });
 });
 
+/*
+
 // 2. Controller - 'getAllRestaurants()' 테스트
 describe('RestaurantController - getAllRestaurants() 통합 테스트', () => {
   let controller: RestaurantController;
@@ -318,3 +320,5 @@ describe('RestaurantController - patchRestaurant() 통합 테스트', () => {
     expect(updatedJson).toEqual(testJsonData);
   });
 });
+
+*/

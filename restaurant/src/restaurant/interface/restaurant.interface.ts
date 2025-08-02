@@ -2,7 +2,7 @@ export interface Restaurant {
   name: string;
   address: string;
   phone: string;
-  rating?: number;
+  rating?: number | null;
 }
 
 export interface RestaurantList {
