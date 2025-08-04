@@ -34,8 +34,6 @@ export class RestaurantController {
         }
     }
 
-    /*
-
     // 2. 특정 name의 restaurant 가져오기 (Controller)
     // * Query 방식
     // http://localhost:3000/restaurant/find?name=생각나는 순대
@@ -45,7 +43,7 @@ export class RestaurantController {
         try {
 
             // 1. Service 사용 -> name 같은 1개 Restaurant 데이터만 가져오기 (getRestaurantByName)
-            const data: Restaurant | undefined = await this.restaurantService.getRestaurantByName(name);
+            const data: Restaurant | null = await this.restaurantService.getRestaurantByName(name);
 
             // 2. '200 성공 Response & JSON 데이터' 전송
             res.status(HttpStatus.OK).json(data);
@@ -56,7 +54,7 @@ export class RestaurantController {
         }
     }
 
-    // 3. restaurants.json에 새로운 restaurant 데이터 추가하기
+    // 3. DB에 새로운 restaurant 데이터 추가하기
     // http://localhost:3000/restaurant/
 
     @Post('/')
@@ -142,7 +140,4 @@ export class RestaurantController {
             }
         }
     }
-
-
-    */
 }
