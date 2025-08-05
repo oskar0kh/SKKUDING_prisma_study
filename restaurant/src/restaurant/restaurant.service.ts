@@ -55,20 +55,16 @@ export class RestaurantService {
     }
 
     // 3. DB에 새로운 restaurant 데이터 추가하기
-    async addRestaurant(newRestaurant: Restaurant): Promise<Restaurant> {
+    async addRestaurant(newRestaurant: Omit<Restaurant, 'createdAt' | 'updatedAt'>): Promise<Restaurant> {
         try {
 
             // 3-1. create 로직 작성
-            const newRestaurant : Restaurant = await this.prisma.restaurant.create({
-                data: {
-                    name: '알촌',
-                    address: '경기도 수원시 어쩌고',
-                    phone: '1111-4444-9999',
-                }
+            const createdRestaurant : Restaurant = await this.prisma.restaurant.create({
+                data: newRestaurant // 입력받은 newRestaurant대로 새로 생성
             });
 
             // 3-2. 어떤걸 생성했는지 반환
-            return newRestaurant;
+            return createdRestaurant;
 
         } catch(err) {
             console.error(`restaurant 추가 오류 : ${err}`);

@@ -1,245 +1,254 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RestaurantService } from './restaurant.service';
 import { Res } from '@nestjs/common';
+import { RestaurantList } from './interface/restaurant.interface';
 
-import { RestaurantList, Restaurant } from './interface/restaurant.interface';
-const fs = require('fs');
-const path = require('path');
+import { PrismaClient, Restaurant } from '@prisma/client'; // Prisma가 생성한 Restaurant 타입 사용 (createdAt, updatedAt 포함)
+import { PrismaService } from '../../../src/prisma/prisma.service'; // PrismaService 모듈 import
+import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
+import { create } from 'domain';
 
-// 전체 Service 코드가 잘 작동되는지 테스트
-describe('RestaurantService', () => {
+// 1. Service - 'getAllRestaurants()' 테스트 (PrismaService를 Mock -> ‘findMany' 메서드 테스트)
+describe('RestaurantService - getAllRestaurants() 유닛 테스트 (Prisma)', () => {
   let service: RestaurantService;
+  let prismaMock: DeepMockProxy<PrismaService>; // PrismaService : Prisma Client를 우리가 직접 extend해서 재정의한 클래스
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [RestaurantService],
-    }).compile();
-
-    service = module.get<RestaurantService>(RestaurantService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-});
-
-/*
-
-// 1. Service - 'getAllRestaurants()' 테스트
-describe('RestaurantService - getAllRestaurants() 유닛 테스트', () => {
-  let service: RestaurantService;
-
-  // 1-1. test용 JSON 파일 경로 받기
-  const testFilePath = path.join(__dirname, 'test-data', 'restaurants.test.json');
-
-  // 1-2. RestaurantService가 기존에 사용하는 filePath 경로를 test 경로로 바꾸기
+  // 1-1. 매 it 테스트마다, 테스트용 prismaMock, service 객체 생성
   beforeEach(() => {
-    service = new RestaurantService(); // RestaurantService 인스턴스 생성 -> 'service'에 할당
-
-    (service as any).filePath = testFilePath; // RestaurantService가 기존에 사용하는 'filePath' = private 임
-                                              // : private을 임시 해제 -> 테스트에서도 'filePath'를 사용할 수 있게 설정!
-                                              //   -> 'filePath'의 경로를, 우리가 지금 지정한 'testFilePath'로 잠깐 변경
-                                              // ∴ RestaurantService에서 test용 JSON 파일 경로로 들어가도록 잠깐 변경
+    prismaMock = mockDeep<PrismaService>();      // PrismaService의 모든 메서드를 'jest.fn()'으로 바꾸기
+    service = new RestaurantService(prismaMock); // 테스트용 mock 객체 생성
   });
 
-  // 1-3. '실제 readFile한 결과 == getAllRestaurants 결과' 인지 확인
-  it('Test용 JSON 파일에서 모든 restaurant 데이터 가져오는지 확인 (Service)', async () => {
+  // 1-2. getAllRestaurants() 테스트 (해당 메서드의 내부에 있는 'findMany'가 mock한 데이터 가져오는지 확인)
+  it('Prisma: 모든 restaurant 데이터 가져오는지 확인 (Service-Mock)', async () => {
+    
+    // 1) 더미 데이터 생성
+    const mockRestaurants: Restaurant[] = [
+      {
+        name: '맥도날드',
+        address: '경기도 수원시 후문쪽 어쩌구',
+        phone: '3232-3232-3232',
+        rating: 4.3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      { 
+        name: '율전회관', 
+        address: '경기도 수원시 어쩌구', 
+        phone: '1212-1212-1212', 
+        rating: 4.6,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
 
-    // 실제로 readFile을 한 결과
-    const expectedData = JSON.parse(await fs.promises.readFile(testFilePath, 'utf-8'));
+    // 2) findMany 사전 설정 : getAllRestaurants() 사용 -> this.prisma.restaurant.findMany()실행 
+    //                     -> findMany가 더미 데이터를 읽도록 설정
+    //
+    // (mockResolvedValue : findMany가, 우리가 만든 더미 데이터를 읽도록 설정)
+    prismaMock.restaurant.findMany.mockResolvedValue(mockRestaurants);
 
-    // getAllRestaurants()를 사용한 결과
+    // 3) getAllRestaurants() 사용 : 이 메서드가 findMany 사용 -> 더미 데이터 가져옴
     const result = await service.getAllRestaurants();
 
-    // 2개 결과가 같은지 비교
-    expect(result).toEqual(expectedData);
+    // 4) 예상값 == 실제값 비교 ('getAllRestaurants로 가져온 더미 데이터 == 더미 데이터' 직접 비교)
+    expect(result).toEqual({ restaurants: mockRestaurants });
+
+    // 5) mock한 findMany가 딱 1번만 사용됐는지 확인
+    expect(prismaMock.restaurant.findMany).toHaveBeenCalledTimes(1);
   });
 });
 
-// 2. Service - 'getRestaurantByName()' 테스트
-describe('RestaurantService - getRestaurantByName() 유닛 테스트', () => {
+// 2. Service - 'getRestaurantByName()' 테스트 (Prisma)
+describe('RestaurantService - getRestaurantByName() 유닛 테스트 (Prisma)', () => {
   let service: RestaurantService;
+  let prismaMock: DeepMockProxy<PrismaService>;
 
-  const testFilePath = path.join(__dirname, 'test-data', 'restaurants.test.json');
-
-  let testJsonData: RestaurantList; // 전체 JSON 데이터 저장하는 전역 변수 선언
-
-  // 2-1. 먼저 test용 JSON 데이터 전체 가져오기
-  beforeAll(async () => {
-    const raw = await fs.promises.readFile(testFilePath, 'utf-8'); // test용 JSON 데이터 읽기
-    testJsonData = JSON.parse(raw); // jsonData 변수에, JSON 데이터 저장
-  });
-
+  // 2-1. 매 it 테스트마다, 테스트용 prismaMock, service 객체 생성
   beforeEach(() => {
-    service = new RestaurantService();
-
-    (service as any).filePath = testFilePath; // test용 JSON 파일 경로로 수정
+    prismaMock = mockDeep<PrismaService>();      // PrismaService의 모든 메서드를 'jest.fn()'으로 바꾸기
+    service = new RestaurantService(prismaMock); // 테스트용 mock 객체 생성
   });
 
-  it('Test용 JSON 파일에서 특정 name에 해당하는 데이터 가져오는지 확인 (Service)', async() => {
-    // 2-2. test용 name 하나 생성
-    const targetName: string = '먹거리 고을';
-
-    // 2-3. 전체 test용 JSON 데이터에서, name이랑 같은 데이터 찾기
-    const expected = testJsonData.restaurants.find(r => r.name === targetName);
+  // 2-2. getRestaurantByName()이 findUnique()를 올바르게 호출하는지 확인
+  it('Prisma: 특정 name에 해당하는 데이터 가져오는지 확인 (Service-Mock)', async() => {
     
-    // 2-4. 실제 getRestaurantByName 메서드 실행
+    // 1) 더미 데이터 생성
+    const mockRestaurants: Restaurant[] = [
+      {
+        name: '맥도날드',
+        address: '경기도 수원시 후문쪽 어쩌구',
+        phone: '3232-3232-3232',
+        rating: 4.3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      { 
+        name: '율전회관', 
+        address: '경기도 수원시 어쩌구', 
+        phone: '1212-1212-1212', 
+        rating: 4.6,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+    
+    // 2) test용 name 하나 지정
+    const targetName: string = '맥도날드';
+
+    // 3) 더미 데이터에서, name이랑 같은 데이터 찾기
+    const expected = mockRestaurants.find(r => r.name === targetName);
+    
+    // 4) Prisma의 'findUnique' Mock : 앞으로 prisma.restaurant.findUnique()가 호출되면, 그냥 expected 값 반환
+    prismaMock.restaurant.findUnique.mockResolvedValue(expected!);
+
+    // 5) getRestaurantByName() 사용 -> findUnique 사용 -> expected 반환
     const result = await service.getRestaurantByName(targetName);
 
-    // 2-4. 예상값 == 실제값 비교
+    // 6) 예상값 == 실제값 비교
     expect(result).toEqual(expected);
+
+    // 7) findUnique가 Service 로직대로 'where : { name : targetName }' 형식으로 호출됐는지 기록 확인
+    expect(prismaMock.restaurant.findUnique).toHaveBeenCalledWith({
+      where: { name: targetName },
+    });
   });
 });
 
 // 3. Service - 'addRestaurant()' 테스트
-describe('RestaurantService - addRestaurant() 유닛 테스트', () => {
+describe('RestaurantService - addRestaurant() 유닛 테스트 (Prisma)', () => {
   let service: RestaurantService;
+  let prismaMock: DeepMockProxy<PrismaService>;
 
-  // __dirname: 현재 service.spec.ts 파일이 위치한 곳
-  const testFilePath = path.join(__dirname, 'test-data', 'restaurants.test.json');
-  
-  // 3-1. 변수 2개 선언: 직접 데이터 넣을 JSON 파일 (testJsonData1), addRestaurant()로 넣을 JSON 파일 (testJsonData2)
-  let testJsonData1: RestaurantList;
-  let testJsonData2: RestaurantList;
-
-  // 3-2. 먼저 test용 JSON 데이터 전체 가져오기 -> testJsonData1에 저장
-  beforeAll(async () => {
-    const raw = await fs.promises.readFile(testFilePath, 'utf-8');
-    testJsonData1 = JSON.parse(raw);
-  });
-
-  // 3-3. 매 it 테스트마다 service 객체 새로 생성하고 테스트 -> 테스트간 독립성 보장
+  // 1-1. 매 it 테스트마다, 테스트용 prismaMock, service 객체 생성
   beforeEach(() => {
-    service = new RestaurantService();
-    (service as any).filePath = testFilePath;
+    prismaMock = mockDeep<PrismaService>();      // PrismaService의 모든 메서드를 'jest.fn()'으로 바꾸기
+    service = new RestaurantService(prismaMock); // 테스트용 mock 객체 생성
   });
 
-  // 3-4. '직접 넣은 데이터 == addRestaurant()로 넣은 데이터' 확인
-  //      -> 'testJsonData1 == testJsonData2' 둘이 같은지 확인
-  it('Test용 Json 파일에 새로운 restaurant 데이터 추가하는 기능 확인 (Service)', async() => {
+  // 1-2. addRestaurant()가 create 호출한 과정 확인
+  it('Prisma: 새로운 restaurant 데이터 추가하는 기능 확인 (Service-Mock)', async() => {
 
-    // 1) 테스트용 데이터 1개 만들기
-    const testData = {
-      "name": "알촌",
-      "address": "경기도 수원시 당구장쪽",
-      "phone": "1111-5555-9999"
+    // 1) addRestaurant() 용 더미 데이터 생성
+    const createInput = {
+      name: '맥도날드',
+      address: '경기도 수원시 후문쪽 어쩌구',
+      phone: '3232-3232-3232',
+      rating: 4.3,
     };
 
-    // 2) 직접 데이터를 JSON 파일에 넣기 (testJsonData1)
-    testJsonData1.restaurants.push(testData);
+    // create가 반환할 데이터 : createdAt, updatedAt 포함
+    const mockRestaurant: Restaurant = {
+      ...createInput,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-    // 3) addRestaurant()로 데이터 넣기
-    await service.addRestaurant(testData); // addRestaurant()의 return값은 쓸 필요 없으므로, 아예 return값 안받기
+    // 2) Prisma의 'create' Mock : 앞으로 prisma.restaurant.create()가 호출되면, 그냥 mockRestaurant 반환
+    prismaMock.restaurant.create.mockResolvedValue(mockRestaurant);
 
-    // 4) addRestaurant() 실행 후, 다시 JSON 파일 읽기 (∵ addRestaurant로 JSON 파일이 바뀌었으니, 다시 읽어와야함)
-    const raw = await fs.promises.readFile(testFilePath, 'utf-8');
-    testJsonData2 = JSON.parse(raw); // 바뀐 JSON 파일 -> testJsonData2에 저장
+    // 3) addRestaurant() 사용 -> create 사용 -> mockRestaurant 반환
+    const result = await service.addRestaurant(createInput);
 
-    // 5) 2개 JSON 파일 속 데이터가 일치하는지 확인
-    expect(testJsonData2).toEqual(testJsonData1);
+    // 4) 예상값 == 실제값 비교
+    expect(result).toEqual(mockRestaurant);
+
+    // 5) create가 Service 로직대로 'data : { ~ }' 형식으로 호출됐는지 기록 확인
+    expect(prismaMock.restaurant.create).toHaveBeenCalledWith({
+      data: createInput // createAt, updatedAt이 없는 형식대로 반환됐는지 확인
+    });
+
   });
 });
 
 // 4. Service - 'deleteRestaurant()' 테스트
-describe('RestaurantService - deleteRestaurant() 유닛 테스트', () => {
+describe('RestaurantService - deleteRestaurant() 유닛 테스트 (Prisma)', () => {
   let service: RestaurantService;
+  let prismaMock: DeepMockProxy<PrismaService>;
 
-  const testFilePath = path.join(__dirname, 'test-data', 'restaurants.test.json');
-  
-  // 4-1. 직접 데이터 삭제할 JSON 파일의 변수 선언
-  let testJsonData: RestaurantList;
-
-  // 4-2. 먼저 test용 JSON 데이터 전체 가져오기
-  beforeAll(async () => {
-    const raw = await fs.promises.readFile(testFilePath, 'utf-8');
-    testJsonData = JSON.parse(raw);
-  });
-
-  // 4-3. 매 it 테스트마다 service 객체 새로 생성
+  // 1-1. 매 it 테스트마다, 테스트용 prismaMock, service 객체 생성
   beforeEach(() => {
-    service = new RestaurantService();
-    (service as any).filePath = testFilePath;
+    prismaMock = mockDeep<PrismaService>();      // PrismaService의 모든 메서드를 'jest.fn()'으로 바꾸기
+    service = new RestaurantService(prismaMock); // 테스트용 mock 객체 생성
   });
 
-  // 4-4. '직접 삭제한 후의 JSON 데이터 == deleteRestaurant()로 삭제한 후의 JSON 데이터' 확인
-  //      -> 'testJsonData에서 삭제한 후 꺼내온 데이터 == 원본 test용 JSON 파일에서 삭제한 후 꺼내온 데이터' 같은지 확인
-  //      -> 'removedItem1 == removedItem2' 인지 확인
-  it('Test용 Json 파일에 특정 name의 restaurant 데이터 삭제하는지 확인 (Service)', async() => {
+  // 1-2. deleteRestaurant()가 delete 호출한 과정 확인
+  it('Prisma: 특정 name의 restaurant 데이터 삭제하는지 확인 (Service-Mock)', async() => {
 
-    // 1) 테스트용 name 1개 설정
-    const targetName: string = '알촌';
+    // 1) 더미 데이터 생성
+    const deletedRestaurant : Restaurant = {
+        name: '맥도날드',
+        address: '경기도 수원시 후문쪽 어쩌구',
+        phone: '3232-3232-3232',
+        rating: 4.3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    };
+    
+    // 2) test용 name 하나 지정
+    const targetName: string = '맥도날드';
 
-    // 2) 직접 데이터를 JSON 파일에서 삭제 & 삭제한 데이터 저장 (testJsonData)
+    // 3) Prisma의 'delete' Mock : 앞으로 prisma.restaurant.create()가 호출되면, 그냥 deletedRestaurant 반환
+    prismaMock.restaurant.delete.mockResolvedValue(deletedRestaurant);
 
-      // 1.. targetName이랑 같은 이름의 데이터 인덱스 찾기
-    const index: number | undefined = testJsonData.restaurants.findIndex(r => r.name === targetName)
+    // 4) deleteRestaurant() 사용 -> delete 사용 -> deletedRestaurant 반환
+    const result = await service.deleteRestaurant(targetName);
 
-      // 2.. testJsonData1 안에서 해당 데이터 잘라내기
-    const removedItem1: Restaurant = testJsonData.restaurants.splice(index, 1)[0];
+    // 5) 예상값 == 실제값 비교
+    expect(result).toEqual(deletedRestaurant);
 
-    // 3) deleteRestaurant() 사용 : 원본 test용 JSON 파일에서 해당 name의 데이터 삭제 & 삭제한 데이터 반환
-    const removedItem2: Restaurant = await service.deleteRestaurant(targetName);
-
-    // 4) 삭제한 후 반환한 2개 데이터가 일치하는지 확인
-    expect(removedItem2).toEqual(removedItem1);
+    // 6) delete가 Service 로직대로 'where : { ~ }' 형식으로 호출됐는지 기록 확인
+    expect(prismaMock.restaurant.delete).toHaveBeenCalledWith({
+      where: { name: targetName },
+    });
   });
 });
 
 // 5. Service - 'patchRestaurant()' 테스트
-describe('RestaurantService - patchRestaurant() 유닛 테스트', () => {
+describe('RestaurantService - patchRestaurant() 유닛 테스트 (Prisma)', () => {
   let service: RestaurantService;
+  let prismaMock: DeepMockProxy<PrismaService>;
 
-  const testFilePath = path.join(__dirname, 'test-data', 'restaurants.test.json');
-
-  // 5-1. 직접 데이터 수정할 JSON 파일의 변수 선언
-  let testJsonData: RestaurantList;
-
-  // 5-2. 먼저 test용 JSON 데이터 전체 가져오기
-  beforeAll(async () => {
-    const raw = await fs.promises.readFile(testFilePath, 'utf-8');
-    testJsonData = JSON.parse(raw);
-  });
-
-  // 5-3. 매 it 테스트마다 service 객체 새로 생성
+  // 1-1. 매 it 테스트마다, 테스트용 prismaMock, service 객체 생성
   beforeEach(() => {
-    service = new RestaurantService();
-    (service as any).filePath = testFilePath;
+    prismaMock = mockDeep<PrismaService>();      // PrismaService의 모든 메서드를 'jest.fn()'으로 바꾸기
+    service = new RestaurantService(prismaMock); // 테스트용 mock 객체 생성
   });
 
-  // 5-4. '직접 수정한 JSON 파일 == patchRestaurant()로 수정한 원본 test용 JSON 파일' 같은지 비교
-  it('Test용 Json 파일에 특정 name의 restaurant 데이터 수정하는지 확인 (Service)', async() => {
+  // 5-4. patchRestaurant()가 update 호출한 과정 확인
+  it('Prisma: 특정 name의 restaurant 데이터 수정하는지 확인 (Service-Mock)', async() => {
     
-    // 1) 수정할 JSON 데이터 1개 만들기
-    const testData = {
-      "name": "성대 밥상",
-      "address": "경기도 수원시 당구장쪽",
-      "phone": "1111-5555-9999",
-      "rating": 4.0 // 추가된 값 (요걸로 수정할거임)
+    // 1) patchRestaurant() 용 더미 데이터 생성
+    const patchInput = {
+      name: '맥도날드',
+      address: '경기도 수원시 후문쪽 어쩌구',
+      phone: '3232-3232-3232',
+      rating: 4.3,
     };
 
-    // 2) 직접 testData의 name과 같은 데이터 찾기 -> 해당 데이터의 정보 수정
-    const found: Restaurant | undefined = testJsonData.restaurants.find(r => r.name === testData.name);
+    // update가 반환할 데이터 : createdAt, updatedAt 포함
+    const mockRestaurant: Restaurant = {
+      ...patchInput,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-      // * found가 undefined인 경우, Error 반환하도록 설계
-    if(found) {
-      Object.assign(found, {
-        ...testData,
-        name: found.name  // 기존 name은 유지하고, 나머지 정보들만 testData속 정보들로 바꾸기
-      });
-    } else {
-      throw new Error(`Restaurant with name ${testData.name} not found`);
-    }
+    // 2) test용 name 하나 지정
+    const targetName: string = '맥도날드';
 
-    // 3) patchRestaurant() 사용 : 원본 test용 JSON 파일 수정하기
-    await service.patchRestaurant(testData.name, testData);
+    // 3) Prisma의 'update' Mock : 앞으로 prisma.restaurant.update()가 호출되면, 그냥 updatedRestaurant 반환
+    prismaMock.restaurant.update.mockResolvedValue(mockRestaurant);
 
-    // 4) 수정된 원본 JSON 파일 다시 읽어오기
-    const raw = await fs.promises.readFile(testFilePath, 'utf-8');
-    const updatedJson = JSON.parse(raw);
+    // 4) patchRestaurant() 사용 -> update 사용 -> updatedRestaurant 반환
+    const result = await service.patchRestaurant(targetName, patchInput);
 
-    // 5) '수정된 원본 JSON 파일 == testJsonData' 같은지 비교
-    expect(updatedJson).toEqual(testJsonData);
+    // 5) 예상값 == 실제값 비교
+    expect(result).toEqual(mockRestaurant);
+
+    // 6) update가 Service 로직대로 'data : { ~ }' 형식으로 호출됐는지 기록 확인
+    expect(prismaMock.restaurant.update).toHaveBeenCalledWith({
+      where: { name: targetName } ,
+      data: patchInput,
+    });
   });
 });
-
-*/

@@ -2,29 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RestaurantController } from './restaurant.controller';
 
 import { RestaurantService } from './restaurant.service'; // RestaurantService 모듈 가져오기
-import { RestaurantList, Restaurant } from './interface/restaurant.interface'; // RestaurantList 타입 가져오기
+import { RestaurantList } from './interface/restaurant.interface'; // RestaurantList 타입 가져오기
 import { REPLCommand } from 'repl';
 
-const fs = require('fs');
-const path = require('path');
-
-// 1. 전체 Controller 코드가 잘 작동되는지 테스트
-describe('RestaurantController', () => { // 1-1. 현재 테스트 그룹명 = 'RestaurantController'로 지정
-  let controller: RestaurantController;  // 나중에 controller 변수에 RestaurantController 객체를 할당할 예정
-
-  beforeEach(async () => {               // 1-2. it() 테스트케이스 실행 전, 초기 환경설정용
-    const module: TestingModule = await Test.createTestingModule({       // 1) Test용 모듈 생성
-      controllers: [RestaurantController],                               //   -> 현재 테스트에서만 사용할 객체 종류 지정
-      providers : [RestaurantService]                                    //   -> Controller가 생성자에서 Service 사용함
-    }).compile();                                                        // 모듈 컴파일 (실제로 실행할 수 있게 됨)
-
-    controller = module.get<RestaurantController>(RestaurantController); // 2) Test용 모듈에서 RestaurantController
-  });                                                                    //      객체 까내서, 현재 테스트 그룹에서 사용하는
-                                                                         //      controller 변수에 할당
-  it('should be defined', () => {        // 1-3. 개별 테스트 케이스 (RestaurantController가 잘 생성되는지 확인하는 테스트)
-    expect(controller).toBeDefined();    //   -> controller가 undefined인지 확인
-  });
-});
+import { PrismaClient, Restaurant } from '@prisma/client'; // Prisma가 생성한 Restaurant 타입 사용 (createdAt, updatedAt 포함)
+import { PrismaService } from '../../../src/prisma/prisma.service'; // PrismaService 모듈 import
+import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 
 /*
 
